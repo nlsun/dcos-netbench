@@ -1,0 +1,26 @@
+{
+  "id": "/redis-bench",
+  "cmd": "changeme",
+  "cpus": 1,
+  "mem": 128,
+  "disk": 0,
+  "instances": 1,
+  "container": {
+    "docker": {
+      "image": "redis",
+      "forcePullImage": false,
+      "privileged": false,
+      "portMappings": [
+        {
+          "containerPort": 0,
+          "protocol": "tcp",
+          "name": "fake"
+        }
+      ],
+      "network": "USER"
+    }
+  },
+  "ipAddress": {
+    "networkName": "dcos"
+  }
+}

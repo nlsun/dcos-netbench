@@ -1,0 +1,22 @@
+{
+  "id": "/siege",
+  "cmd": "changeme",
+  "cpus": 1,
+  "mem": 128,
+  "disk": 0,
+  "instances": 1,
+  "container": {
+    "docker": {
+      "image": "nlsun/siege",
+      "forcePullImage": false,
+      "privileged": false,
+      "network": "HOST"
+    }
+  },
+  "portDefinitions": [
+    {
+      "protocol": "tcp",
+      "port": 0
+    }
+  ]
+}

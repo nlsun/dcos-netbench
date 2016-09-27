@@ -1,0 +1,25 @@
+{
+  "id": "/httpd",
+  "cpus": 1,
+  "mem": 128,
+  "disk": 0,
+  "instances": 1,
+  "container": {
+    "docker": {
+      "image": "nlsun/httpd",
+      "forcePullImage": false,
+      "privileged": false,
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "protocol": "tcp",
+          "name": "web"
+        }
+      ],
+      "network": "USER"
+    }
+  },
+  "ipAddress": {
+    "networkName": "dcos"
+  }
+}
