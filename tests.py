@@ -5,14 +5,10 @@ import shlex
 import json
 import time
 
-# XXX make sure dcos cli is connected
-# XXX does not do any waiting correctly, just does sleeps
-# XXX have the first sleep be longer, so the image can pull
-# XXX add notion of repetitions, how many times to run each command before
-#   averaging and outputting that.
+# XXX Does not do some of the waiting correctly, some are just sleeps
 
 def http_bridge(os_type, server_file, client_file, tmp_file):
-    def bridge_vegeta():
+    def bridge_vegeta(unused):
         deploy_wait()
         time.sleep(5)
         host, port = bridge_hostport(os_type, "_web._httpd._tcp.marathon.mesos")
@@ -20,15 +16,14 @@ def http_bridge(os_type, server_file, client_file, tmp_file):
     return http_helper(os_type, server_file, client_file, tmp_file, bridge_vegeta)
 
 def http_host(os_type, server_file, client_file, tmp_file):
-    def host_vegeta():
+    def host_vegeta(host):
         deploy_wait()
         time.sleep(5)
-        host = host_host(os_type)
         return host + ":80"
     return http_helper(os_type, server_file, client_file, tmp_file, host_vegeta)
 
 def http_overlay(os_type, server_file, client_file, tmp_file):
-    def overlay_vegeta():
+    def overlay_vegeta(unused):
         deploy_wait()
         time.sleep(30)
         url = "httpd.marathon.containerip.dcos.thisdcos.directory:80"
@@ -37,10 +32,21 @@ def http_overlay(os_type, server_file, client_file, tmp_file):
 
 def http_helper(os_type, server_file, client_file, tmp_file, get_vegeta):
     deploy_wait()
-    subprocess.call(shlex.split("dcos marathon app add " + server_file))
+    agent_hostname = rand_agent_ip(os_type)
+    server_fd = open(server_file, 'r')
+    server_json = json.load(server_fd)
+    server_json["constraints"] = [["hostname", "LIKE", agent_hostname]]
+    tmp_file.seek(0)
+    tmp_file.truncate()
+    tmp_file.write(json.dumps(server_json))
+    tmp_file.flush()
+    subprocess.call(shlex.split("dcos marathon app add " + tmp_file.name))
     client_fd = open(client_file, 'r')
     client_json = json.load(client_fd)
-    client_json["cmd"] = gen_vegeta(get_vegeta())
+    client_json["cmd"] = gen_vegeta(get_vegeta(agent_hostname))
+    client_json["constraints"] = [["hostname", "UNLIKE", agent_hostname]]
+    tmp_file.seek(0)
+    tmp_file.truncate()
     tmp_file.write(json.dumps(client_json))
     tmp_file.flush()
     subprocess.call(shlex.split("dcos marathon app add " + tmp_file.name))
@@ -48,6 +54,17 @@ def http_helper(os_type, server_file, client_file, tmp_file, get_vegeta):
     subprocess.call(shlex.split("dcos marathon app remove httpd"))
     subprocess.call(shlex.split("dcos marathon app remove vegeta"))
     return raw_log.decode()
+
+def rand_agent_ip(os_type):
+    ssh_comm = ("dcos node ssh --leader --master-proxy " +
+                "--option 'ForwardAgent=yes' " +
+                "--option 'LogLevel=QUIET' " +
+                "--option 'StrictHostKeyChecking=no' " +
+                "--option 'UserKnownHostsFile=/dev/null' " +
+                "--user '{}' ".format(os_type) +
+                "'host slave.mesos'")
+    raw_out = subprocess.check_output(shlex.split(ssh_comm))
+    return raw_out.decode().splitlines()[0].split()[3]
 
 def vegeta_wait():
     finished = ""
@@ -68,22 +85,21 @@ def siege_wait():
     return raw_log
 
 def redis_bridge(os_type, server_file, client_file, tmp_file):
-    def bridge_bench():
+    def bridge_bench(unused):
         deploy_wait()
         time.sleep(5)
         return bridge_hostport(os_type, "_redis._redis._tcp.marathon.mesos")
     return redis_helper(os_type, server_file, client_file, tmp_file, bridge_bench)
 
 def redis_host(os_type, server_file, client_file, tmp_file):
-    def host_bench():
+    def host_bench(host):
         deploy_wait()
         time.sleep(5)
-        host = host_host(os_type)
         return (host, "6379")
     return redis_helper(os_type, server_file, client_file, tmp_file, host_bench)
 
 def redis_overlay(os_type, server_file, client_file, tmp_file):
-    def overlay_bench():
+    def overlay_bench(unused):
         deploy_wait()
         time.sleep(30)
         url = "redis.marathon.containerip.dcos.thisdcos.directory"
@@ -107,25 +123,23 @@ def bridge_hostport(os_type, addr):
     host = split_port[7]
     return (host, port)
 
-def host_host(os_type):
-    ssh_comm = ("dcos node ssh --leader --master-proxy " +
-                "--option 'ForwardAgent=yes' " +
-                "--option 'LogLevel=QUIET' " +
-                "--option 'StrictHostKeyChecking=no' " +
-                "--option 'UserKnownHostsFile=/dev/null' " +
-                "--user '{}' ".format(os_type) +
-                "'host slave.mesos'")
-    raw_port = subprocess.check_output(shlex.split(ssh_comm))
-    split_port = raw_port.decode().split()
-    host = split_port[3]
-    return host
-
 def redis_helper(os_type, server_file, client_file, tmp_file, get_bench):
     deploy_wait()
-    subprocess.call(shlex.split("dcos marathon app add " + server_file))
+    agent_hostname = rand_agent_ip(os_type)
+    server_fd = open(server_file, 'r')
+    server_json = json.load(server_fd)
+    server_json["constraints"] = [["hostname", "LIKE", agent_hostname]]
+    tmp_file.seek(0)
+    tmp_file.truncate()
+    tmp_file.write(json.dumps(server_json))
+    tmp_file.flush()
+    subprocess.call(shlex.split("dcos marathon app add " + tmp_file.name))
     client_fd = open(client_file, 'r')
     client_json = json.load(client_fd)
-    client_json["cmd"] = gen_redis_bench(get_bench())
+    client_json["cmd"] = gen_redis_bench(get_bench(agent_hostname))
+    client_json["constraints"] = [["hostname", "UNLIKE", agent_hostname]]
+    tmp_file.seek(0)
+    tmp_file.truncate()
     tmp_file.write(json.dumps(client_json))
     tmp_file.flush()
     subprocess.call(shlex.split("dcos marathon app add " + tmp_file.name))
