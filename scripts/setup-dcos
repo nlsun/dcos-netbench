@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -e
+
+bootstrap=$1
+master=$2
+agent1=$3
+agent2=$4
+priv_key=$5 # path to private key, e.g. ~/.ssh/<keyname>
+configure_script_url=$6
+username=$7
+password=$8
+
+user="centos"
+bootstrapper="scripts/bootstrapper"
+
+scp $priv_key ${user}@${bootstrap}:ssh-key
+scp $bootstrapper ${user}@${bootstrap}:bootstrapper
+ssh -A -o "StrictHostKeyChecking no" ${user}@${bootstrap} "bash bootstrapper $master $agent1 $agent2 $configure_script_url $username $password"

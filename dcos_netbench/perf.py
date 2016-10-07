@@ -1,42 +1,92 @@
 #!/usr/bin/env python
 
+import click
+import datetime
+import json
+import os
 import sys
 import subprocess
 import shlex
-import json
 import tempfile
-import time
-import tests
-import datetime
 
-class Tester:
-    def __init__(self, os_type, test_type, net_type):
-        self.all_test = ["http", "redis"]
-        self.all_net = ["bridge", "overlay", "host"]
-        self.results = {}
-        self.parsed_results = {}
-        self.os_type = os_type
+from dcos_netbench import tests
+from dcos_netbench import util
 
-        timestamp = int(datetime.datetime.utcnow().timestamp())
-        self.default_prefix = "{}_".format(timestamp)
-        if os_type == "coreos":
-            self.user = "core"
-        else:
-            self.user = os_type
-        if test_type == "all":
-            self.test_type = list(self.all_test)
-        else:
-            self.test_type = [test_type]
-        if net_type == "all":
-            self.net_type = list(self.all_net)
-        else:
-            self.net_type = [net_type]
+@click.group()
+def main():
+    pass
 
-    def get_os_id(self, os_type):
-        return {"coreos": "CoreOS",
-                "centos": "Centos7"}[os_type]
+@main.command()
+@click.argument('master', nargs=1) # Master public IP address
+@click.argument('os_type', nargs=1)
+@click.option('--test', '-t', default="all", help="Type of test to run as CSV")
+@click.option('--net', '-n', default="all", help="Type to network to test as CSV")
+@click.option('--reps', '-r', type=click.INT, default=1,
+              help="Number of times to run each test (results are averaged)")
+def run(master, os_type, test, net, reps):
+    valid_os = ["coreos", "centos"]
+    if os_type not in valid_os:
+        print("'os_type' must be one of {}".format(valid_os))
+        exit(1)
+    test_type = set(test.split(","))
+    net_type = set(net.split(","))
 
-    def files(self, test_type, net_type):
+    print('Running benchmarks')
+    print([os_type, test_type, net_type, reps, master])
+    config = Config(os_type, master, test_type, net_type)
+    tester = Tester(config)
+    tester.run(reps)
+    tester.parse_results()
+    tester.dump_results()
+
+
+@main.command()
+@click.argument('master', nargs=1) # Master public IP address
+@click.argument('os_type', nargs=1)
+@click.option('--swarm/--no-swarm', default=False)
+def init(master, os_type, swarm):
+    print('Initializing')
+    print([master, os_type, swarm])
+    config = Config(os_type, master)
+    util.init_swarm(config)
+
+
+class Config:
+    """
+    This class should be treated as read-only except through public functions
+    """
+
+    def __init__(self, os_type, master_address, test_types=None, net_types=None):
+        self.dnet = "my-net" # Name of Docker overlay network
+        self.all_test = set(["http", "redis"])
+        self.all_net = set(["bridge", "overlay", "dockeroverlay", "host"])
+
+        self.os = os_type
+        self.ms = master_address # public address
+
+        self.prefix = self.get_prefix()
+        self.user = self.get_user(self.os)
+        self.ag1, self.ag2 = self.get_agents(master_address, self.user) # private address
+        self.os_id = self.get_os_id(self.os)
+        self.tmpfd = tempfile.NamedTemporaryFile(mode="w+")
+        self.json_path = self.get_json_path() # where to find the json files
+        if test_types is not None:
+            self.ttypes = self.get_test_type(test_types)
+        if net_types is not None:
+            self.ntypes = self.get_net_type(net_types)
+
+        self.sfile = None
+        self.cfile = None
+
+    def set_app(self, test_type, net_type):
+        self.sfile, self.cfile = self.get_files(self.json_path, test_type, net_type)
+
+    ### Private Functions
+
+    def get_json_path(self):
+        return os.path.join(os.path.dirname(__file__), "json")
+
+    def get_files(self, json_path, test_type, net_type):
         if test_type == "http":
             server_name = "httpd"
             client_name = "vegeta"
@@ -45,25 +95,64 @@ class Tester:
             client_name = "redis-bench"
         server_file = "{}-{}.json".format(server_name, net_type)
         client_file = "{}-{}.json".format(client_name, net_type)
-        return (server_file, client_file)
+        server_path = os.path.join(json_path, server_file)
+        client_path = os.path.join(json_path, client_file)
+        return (server_path, client_path)
+
+    def get_prefix(self):
+        timestamp = int(datetime.datetime.utcnow().timestamp())
+        return "{}_".format(timestamp)
+
+    def get_test_type(self, test_type):
+        if "all" in test_type:
+            return (test_type - set(["all"])) | self.all_test
+        return test_type
+
+    def get_net_type(self, net_type):
+        if "all" in net_type:
+            return (net_type - set(["all"])) | self.all_net
+        return net_type
+
+    def get_os_id(self, os_type):
+        return {"coreos": "CoreOS",
+                "centos": "Centos7"}[os_type]
+
+    def get_user(self, os_type):
+        if os_type == "coreos":
+            return "core"
+        return os_type
+    
+    def get_agents(self, master, user):
+        comm = "ssh -o 'StrictHostKeyChecking=no' {}@{} 'host slave.mesos'".format(user, master)
+        res = subprocess.check_output(shlex.split(comm))
+        parsed = [line.split()[3] for line in res.decode().splitlines()]
+        assert len(parsed) >= 2
+        return parsed[:2]
+
+
+class Tester:
+    def __init__(self, config):
+        self.config = config
+        self.results = {}
+        self.parsed_results = {}
 
     def run(self, reps=1, progress=True, prefix=None):
         """
         reps: How many repetitions to run for each test
         """
         if prefix is None:
-            prefix = self.default_prefix
+            prefix = self.config.prefix
         raw_output_file = prefix + "raw.log"
         raw_out_fd = open(raw_output_file, 'w+')
 
-        for tt in self.test_type:
-            for nt in self.net_type:
+        for tt in self.config.ttypes:
+            for nt in self.config.ntypes:
                 fun_str = "{}_{}".format(tt, nt)
                 fun = getattr(tests, fun_str)
-                server_file, client_file = self.files(tt, nt)
+                self.config.set_app(tt, nt)
                 output = []
                 for i in range(reps):
-                    res = self.run_test(fun, self.user, server_file, client_file)
+                    res = self.run_test(fun, self.config)
                     summary = "{}\n{}".format(fun_str, res)
                     if progress:
                         print(summary)
@@ -74,7 +163,7 @@ class Tester:
         raw_out_fd.close()
 
     def parse_results(self):
-        self.parse(self.results, self.os_type)
+        self.parse(self.results, self.config.os)
 
     def parse(self, results, os_type):
         """
@@ -118,8 +207,8 @@ class Tester:
 
     def dump_results(self, prefix=None):
         if prefix is None:
-            parsed_prefix = self.default_prefix
-        self.dump(self.parsed_results, self.os_type, parsed_prefix)
+            parsed_prefix = self.config.prefix
+        self.dump(self.parsed_results, self.config.os, parsed_prefix)
 
     def dump(self, parsed_results, os_type, prefix):
         """
@@ -131,7 +220,7 @@ class Tester:
                 fname = "{}{}.csv".format(prefix, test_type)
                 fds[test_type] = open(fname, "w+")
 
-        os_id = self.get_os_id(os_type)
+        os_id = self.config.os_id
         for test_type in sorted(parsed_results.keys()):
             nets = parsed_results[test_type]
             header = None
@@ -153,11 +242,10 @@ class Tester:
         for key in fds.keys():
             fds[key].close()
 
-    def run_test(self, test_fun, os_type, server_file, client_file):
-        tmp_file = tempfile.NamedTemporaryFile(mode="w+")
-        output = test_fun(os_type, server_file, client_file, tmp_file)
-        tmp_file.close()
-        return output
+    def run_test(self, test_fun, config):
+        util.reset_file(config.tmpfd)
+        return test_fun(config)
+
 
 class Extractor:
     def __init__(self, input_val=None, input_type=None):
@@ -200,16 +288,6 @@ class Extractor:
                 results["GET req"] = line[1].strip("\"")
         return (title, results)
 
-def main():
-    os_type = sys.argv[1]
-    test_type = sys.argv[2]
-    net_type = sys.argv[3]
-    repetitions = int(sys.argv[4])
-    assert os_type == "coreos" or os_type == "centos"
-    tester = Tester(os_type, test_type, net_type)
-    tester.run(repetitions)
-    tester.parse_results()
-    tester.dump_results()
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,84 @@
+#!/bin/bash
+
+set -e
+
+master=$1
+agent1=$2
+agent2=$3
+configure_script_url=$4
+username=$5
+password=$6
+
+confdir="genconf"
+cluster_name="nsun-docker12"
+process_timeout=900
+
+get_ip() {
+    host=$1
+    echo $(ssh -o "StrictHostKeyChecking no" $host "curl -fsSL http://169.254.169.254/latest/meta-data/local-ipv4")
+}
+
+install_docker12() {
+    host=$1
+
+    ssh -o "StrictHostKeyChecking no" $host \
+        "sudo yum install -y docker-engine && \
+         sudo sed -e 's|fd://|unix:///var/run/docker.sock|' -i /etc/systemd/system/docker.service.d/override.conf && \
+         sudo systemctl daemon-reload && \
+         sudo systemctl stop docker && \
+         sudo systemctl start docker"
+}
+
+curl -O $configure_script_url
+configure_script=$(echo dcos_generate_config*)
+
+mkdir genconf
+chmod 400 ssh-key
+mv ssh-key ${confdir}/
+
+detectscript="${confdir}/ip-detect"
+cat <<EOF > "$detectscript"
+#!/bin/sh
+# Example ip-detect script using an external authority
+# Uses the AWS Metadata Server to get the node's internal
+# ipv4 address
+curl -fsSL http://169.254.169.254/latest/meta-data/local-ipv4
+EOF
+chmod 755 $detectscript
+
+configyaml="${confdir}/config.yaml"
+cat <<EOF > "$configyaml"
+---
+agent_list:
+- $(get_ip $agent1)
+- $(get_ip $agent2)
+bootstrap_url: 'file:///opt/dcos_install_tmp'
+exhibitor_storage_backend: static
+cluster_name: $cluster_name
+log_directory: /genconf/logs
+master_discovery: static
+master_list:
+- $(get_ip $master)
+process_timeout: $process_timeout
+resolvers:
+- 8.8.4.4
+- 8.8.8.8
+ssh_key_path: /genconf/ssh-key
+ssh_port: '22'
+ssh_user: $USER
+superuser_password_hash: "$(sudo bash ${configure_script} --hash-password $password | tail -n1)"
+superuser_username: $username
+EOF
+
+sudo bash $configure_script --genconf
+sudo bash $configure_script --install-prereqs
+sudo bash $configure_script --preflight
+sudo bash $configure_script --deploy
+sudo bash $configure_script --postflight
+
+# install docker12 on all master/agents
+for node in $master $agent1 $agent2; do
+    install_docker12 $node
+done
+
+echo "Done setting up"
