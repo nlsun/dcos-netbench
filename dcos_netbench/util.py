@@ -1,10 +1,12 @@
-import subprocess
 import shlex
+import subprocess
+
 
 def reset_file(file_fd):
     file_fd.seek(0)
     file_fd.truncate()
     file_fd.flush()
+
 
 def init_swarm(config):
     """
@@ -39,6 +41,7 @@ def init_swarm(config):
             "'sudo docker network create " +
             "--driver overlay --subnet 10.0.9.0/24 {}'".format(network_name))
     subprocess.call(shlex.split(comm))
+
 
 def agent_swarm(user, master, agent, token, advertise_addr):
     comm = ("ssh -A -o 'StrictHostKeyChecking=no' {}@{} ".format(user, master) +

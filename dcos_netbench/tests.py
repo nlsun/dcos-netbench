@@ -25,6 +25,7 @@ def http_dockeroverlay(config):
     docker_rm(config.ms, config.user, "vegeta")
     return raw_log.decode()
 
+
 def redis_dockeroverlay(config):
     docker_wait(config.ms, config.user)
     hostname1 = get_hostname(config.ms, config.user, config.ag1)
@@ -33,12 +34,13 @@ def redis_dockeroverlay(config):
                   "redis")
     docker_wait(config.ms, config.user)
     docker_create(config.ms, config.user, config.dnet, "redis-bench", hostname2,
-                  "redis", gen_redis_bench( ("redis", "6379") ))
+                  "redis", gen_redis_bench(("redis", "6379")))
     docker_wait(config.ms, config.user)
     raw_log = docker_redis_wait_output(config.ms, config.user, config.ag2, "redis-bench")
     docker_rm(config.ms, config.user, "redis")
     docker_rm(config.ms, config.user, "redis-bench")
     return raw_log.decode()
+
 
 def docker_check_output(master, user, host, name):
     comm = """\
@@ -55,6 +57,7 @@ def docker_check_output(master, user, host, name):
            """.format(user, master, host, container_id)
     return subprocess.check_output(shlex.split(comm))
 
+
 def docker_http_wait_output(master, user, host, name):
     finished = ""
     raw_log = None
@@ -63,6 +66,7 @@ def docker_http_wait_output(master, user, host, name):
         finished = raw_log.decode()
         time.sleep(1)
     return raw_log
+
 
 def docker_redis_wait_output(master, user, host, name):
     finished = ""
@@ -86,12 +90,14 @@ def docker_create(master, user, network_name, name, hostname, image, command=Non
            """.format(user, master, network_name, name, hostname, image, parsed_command)
     return subprocess.call(shlex.split(comm))
 
+
 def docker_rm(master, user, name):
     comm = """\
            ssh -A -o 'StrictHostKeyChecking=no' {}@{} \
            'sudo docker service rm {}' \
            """.format(user, master, name)
     return subprocess.call(shlex.split(comm))
+
 
 def get_hostname(master, user, address):
     comm = ("ssh -A -o 'StrictHostKeyChecking=no' {}@{} ".format(user, master) +
@@ -155,6 +161,7 @@ def http_helper(os_type, server_file, client_file, tmp_file, get_vegeta,
 
 def vegeta_check(output):
     return "latencies" not in output
+
 
 def vegeta_wait():
     finished = ""
@@ -220,8 +227,10 @@ def bridge_hostport(os_type, addr, master):
     host = split_port[7]
     return (host, port)
 
+
 def redis_check(output):
     return "MSET (10 keys)" not in output
+
 
 def redis_helper(os_type, server_file, client_file, tmp_file, get_bench,
                  master, agent1, agent2):
@@ -274,6 +283,7 @@ def deploy_wait():
     comm = "bash -c 'while dcos marathon deployment list > /dev/null 2>&1; do sleep 1; done'"
     subprocess.call(shlex.split(comm))
 
+
 def docker_check(master, user):
     comm = "ssh {}@{} 'sudo docker service ls'".format(user, master)
     res = subprocess.check_output(shlex.split(comm))
@@ -283,6 +293,7 @@ def docker_check(master, user):
         if top != bot:
             return False
     return True
+
 
 def docker_wait(master, user):
     while not docker_check(master, user):

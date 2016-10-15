@@ -1,23 +1,24 @@
 #!/usr/bin/env python
 
-import click
 import datetime
 import json
 import os
-import sys
-import subprocess
 import shlex
+import subprocess
 import tempfile
 
-from dcos_netbench import tests
-from dcos_netbench import util
+from dcos_netbench import tests, util
+
+import click
+
 
 @click.group()
 def main():
     pass
 
+
 @main.command()
-@click.argument('master', nargs=1) # Master public IP address
+@click.argument('master', nargs=1)  # Master public IP address
 @click.argument('os_type', nargs=1)
 @click.option('--test', '-t', default="all", help="Type of test to run as CSV")
 @click.option('--net', '-n', default="all", help="Type to network to test as CSV")
@@ -41,7 +42,7 @@ def run(master, os_type, test, net, reps):
 
 
 @main.command()
-@click.argument('master', nargs=1) # Master public IP address
+@click.argument('master', nargs=1)  # Master public IP address
 @click.argument('os_type', nargs=1)
 @click.option('--swarm/--no-swarm', default=False)
 def init(master, os_type, swarm):
@@ -57,19 +58,19 @@ class Config:
     """
 
     def __init__(self, os_type, master_address, test_types=None, net_types=None):
-        self.dnet = "my-net" # Name of Docker overlay network
+        self.dnet = "my-net"  # Name of Docker overlay network
         self.all_test = set(["http", "redis"])
         self.all_net = set(["bridge", "overlay", "dockeroverlay", "host"])
 
         self.os = os_type
-        self.ms = master_address # public address
+        self.ms = master_address  # public address
 
         self.prefix = self.get_prefix()
         self.user = self.get_user(self.os)
-        self.ag1, self.ag2 = self.get_agents(master_address, self.user) # private address
+        self.ag1, self.ag2 = self.get_agents(master_address, self.user)  # private address
         self.os_id = self.get_os_id(self.os)
         self.tmpfd = tempfile.NamedTemporaryFile(mode="w+")
-        self.json_path = self.get_json_path() # where to find the json files
+        self.json_path = self.get_json_path()  # where to find the json files
         if test_types is not None:
             self.ttypes = self.get_test_type(test_types)
         if net_types is not None:
@@ -81,7 +82,7 @@ class Config:
     def set_app(self, test_type, net_type):
         self.sfile, self.cfile = self.get_files(self.json_path, test_type, net_type)
 
-    ### Private Functions
+    # Private Functions
 
     def get_json_path(self):
         return os.path.join(os.path.dirname(__file__), "json")
@@ -121,7 +122,7 @@ class Config:
         if os_type == "coreos":
             return "core"
         return os_type
-    
+
     def get_agents(self, master, user):
         comm = "ssh -o 'StrictHostKeyChecking=no' {}@{} 'host slave.mesos'".format(user, master)
         res = subprocess.check_output(shlex.split(comm))
