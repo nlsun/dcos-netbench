@@ -11,7 +11,7 @@ rm -rf \
     "$BASEDIR/dist" \
     $BASEDIR/*.egg-info
 
-find . -name '*.pyc' | xargs rm
+find . -name '*.pyc' | xargs rm -f
 find . -name '__pycache__' | xargs rm -rf
 
 echo "Deleted virtualenv and caches"

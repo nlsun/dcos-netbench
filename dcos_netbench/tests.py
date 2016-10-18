@@ -110,9 +110,9 @@ def http_bridge(config):
     def bridge_vegeta(unused):
         deploy_wait()
         time.sleep(5)
-        host, port = bridge_hostport(config.os, "_web._httpd._tcp.marathon.mesos", config.ms)
+        host, port = bridge_hostport(config.user, "_web._httpd._tcp.marathon.mesos", config.ms)
         return host + ":" + port
-    return http_helper(config.os, config.sfile, config.cfile, config.tmpfd,
+    return http_helper(config.sfile, config.cfile, config.tmpfd,
                        bridge_vegeta, config.ms, config.ag1, config.ag2)
 
 
@@ -121,7 +121,7 @@ def http_host(config):
         deploy_wait()
         time.sleep(5)
         return host + ":80"
-    return http_helper(config.os, config.sfile, config.cfile, config.tmpfd,
+    return http_helper(config.sfile, config.cfile, config.tmpfd,
                        host_vegeta, config.ms, config.ag1, config.ag2)
 
 
@@ -131,11 +131,11 @@ def http_overlay(config):
         time.sleep(30)
         url = "httpd.marathon.containerip.dcos.thisdcos.directory:80"
         return url
-    return http_helper(config.os, config.sfile, config.cfile, config.tmpfd,
+    return http_helper(config.sfile, config.cfile, config.tmpfd,
                        overlay_vegeta, config.ms, config.ag1, config.ag2)
 
 
-def http_helper(os_type, server_file, client_file, tmp_file, get_vegeta,
+def http_helper(server_file, client_file, tmp_file, get_vegeta,
                 master, agent1, agent2):
     deploy_wait()
     server_fd = open(server_file, 'r')
@@ -187,8 +187,8 @@ def redis_bridge(config):
     def bridge_bench(unused):
         deploy_wait()
         time.sleep(5)
-        return bridge_hostport(config.os, "_redis._redis._tcp.marathon.mesos", config.ms)
-    return redis_helper(config.os, config.sfile, config.cfile, config.tmpfd,
+        return bridge_hostport(config.user, "_redis._redis._tcp.marathon.mesos", config.ms)
+    return redis_helper(config.sfile, config.cfile, config.tmpfd,
                         bridge_bench, config.ms, config.ag1, config.ag2)
 
 
@@ -197,7 +197,7 @@ def redis_host(config):
         deploy_wait()
         time.sleep(5)
         return (host, "6379")
-    return redis_helper(config.os, config.sfile, config.cfile, config.tmpfd,
+    return redis_helper(config.sfile, config.cfile, config.tmpfd,
                         host_bench, config.ms, config.ag1, config.ag2)
 
 
@@ -207,14 +207,14 @@ def redis_overlay(config):
         time.sleep(30)
         url = "redis.marathon.containerip.dcos.thisdcos.directory"
         return (url, "6379")
-    return redis_helper(config.os, config.sfile, config.cfile, config.tmpfd,
+    return redis_helper(config.sfile, config.cfile, config.tmpfd,
                         overlay_bench, config.ms, config.ag1, config.ag2)
 
 
-def bridge_hostport(os_type, addr, master):
+def bridge_hostport(user, addr, master):
     split_port = []
     while len(split_port) != 8:
-        ssh_comm = ("ssh {}@{} ".format(os_type, master) +
+        ssh_comm = ("ssh {}@{} ".format(user, master) +
                     "-o 'ForwardAgent=yes' " +
                     "-o 'LogLevel=QUIET' " +
                     "-o 'StrictHostKeyChecking=no' " +
@@ -232,7 +232,7 @@ def redis_check(output):
     return "MSET (10 keys)" not in output
 
 
-def redis_helper(os_type, server_file, client_file, tmp_file, get_bench,
+def redis_helper(server_file, client_file, tmp_file, get_bench,
                  master, agent1, agent2):
     deploy_wait()
     server_fd = open(server_file, 'r')

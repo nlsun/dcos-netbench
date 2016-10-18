@@ -24,7 +24,8 @@ def main():
 @click.option('--net', '-n', default="all", help="Type to network to test as CSV")
 @click.option('--reps', '-r', type=click.INT, default=1,
               help="Number of times to run each test (results are averaged)")
-def run(master, os_type, test, net, reps):
+@click.option('--prefix', '-p', help="Set prefix for output files, defaults to timestamp")
+def run(master, os_type, test, net, reps, prefix):
     valid_os = ["coreos", "centos"]
     if os_type not in valid_os:
         print("'os_type' must be one of {}".format(valid_os))
@@ -33,8 +34,8 @@ def run(master, os_type, test, net, reps):
     net_type = set(net.split(","))
 
     print('Running benchmarks')
-    print([os_type, test_type, net_type, reps, master])
-    config = Config(os_type, master, test_type, net_type)
+    print([master, os_type, test_type, net_type, reps, prefix])
+    config = Config(os_type, master, test_type, net_type, prefix)
     tester = Tester(config)
     tester.run(reps)
     tester.parse_results()
@@ -57,7 +58,7 @@ class Config:
     This class should be treated as read-only except through public functions
     """
 
-    def __init__(self, os_type, master_address, test_types=None, net_types=None):
+    def __init__(self, os_type, master_address, test_types=None, net_types=None, prefix=None):
         self.dnet = "my-net"  # Name of Docker overlay network
         self.all_test = set(["http", "redis"])
         self.all_net = set(["bridge", "overlay", "dockeroverlay", "host"])
@@ -65,7 +66,6 @@ class Config:
         self.os = os_type
         self.ms = master_address  # public address
 
-        self.prefix = self.get_prefix()
         self.user = self.get_user(self.os)
         self.ag1, self.ag2 = self.get_agents(master_address, self.user)  # private address
         self.os_id = self.get_os_id(self.os)
@@ -75,6 +75,10 @@ class Config:
             self.ttypes = self.get_test_type(test_types)
         if net_types is not None:
             self.ntypes = self.get_net_type(net_types)
+        if prefix is None:
+            self.prefix = self.get_prefix()
+        else:
+            self.prefix = prefix
 
         self.sfile = None
         self.cfile = None
