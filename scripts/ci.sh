@@ -1,6 +1,10 @@
 #!/bin/bash
 set -o errexit -o nounset -o pipefail
 
+status_line() {
+    printf "\n### $1 ###\n\n"
+}
+
 run_tests() {
     CONFIG=$1
     OS=$2
@@ -45,25 +49,32 @@ TAGID="${OS_TYPE}${BUILD_NUMBER}"
 CLUSTER_NAME="DCOSNETWORKPERF-${TAGID}"
 CONFIG_PATH="/tmp/dcos_${TAGID}.toml"
 
+status_line "Printing parameters"
 shift # keep stuff hidden
 echo $@
 
-# Start CCM
+echo "$TAGID"
+echo "$CLUSTER_NAME"
+echo "$CONFIG_PATH"
+
+status_line "Start CCM"
 CLUSTER_ID=$(DCOS_CHANNEL=$DCOS_CHANNEL \
     CCM_AUTH_TOKEN=$CCM_AUTH_TOKEN \
     CLUSTER_NAME=$CLUSTER_NAME \
     CF_TEMPLATE_NAME=$CF_TEMPLATE_NAME \
     $SHELL ccm/start_ccm_cluster.sh)
+echo "CLUSTER_ID $CLUSTER_ID"
 
-# Bootstrap
+status_line "Bootstrap"
 make env
 
-# Wait CCM
+status_line "Wait CCM"
 MASTERIP=$(CLUSTER_ID=$CLUSTER_ID \
     CCM_AUTH_TOKEN=$CCM_AUTH_TOKEN \
     $SHELL ccm/wait_for_ccm_cluster.sh)
+echo "MASTERIP $MASTERIP"
 
-# Run tests
+status_line "Run tests"
 DCOS_CONFIG=$CONFIG_PATH dcos config set core.dcos_url "http://$MASTERIP"
 chmod 600 $CONFIG_PATH
 
@@ -75,10 +86,10 @@ run_tests "$CONFIG_PATH" \
     "$NETWORK_TYPE" \
     "${TAGID}_"
 
-# Stop CCM
+status_line "Stop CCM"
 CLUSTER_ID=$CLUSTER_ID \
     CCM_AUTH_TOKEN=$CCM_AUTH_TOKEN \
     $SHELL ccm/delete_ccm_cluster.sh
 
-# Print results to stdout
+status_line "Printing results to stdout"
 output_files ${TAGID}*.csv
