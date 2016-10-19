@@ -7,7 +7,7 @@ exit 1
 $SHELL scripts/ci.sh \
     $CCM_AUTH_TOKEN \
     $BUILD_NUMBER \
-    5 \
+    10 \
     "testing/master" \
     "N/A" \
     "centos" \
