@@ -1,0 +1,18 @@
+#!/bin/bash
+
+sudo yum install -y \
+    tmux \
+    vim \
+    make \
+    git
+
+sudo yum install -y epel-release
+sudo yum install -y python34
+sudo bash -c "curl https://bootstrap.pypa.io/get-pip.py | python3.4"
+sudo pip3 install virtualenv
+
+curl -O https://downloads.dcos.io/binaries/cli/linux/x86-64/0.4.14/dcos
+chmod 755 dcos
+sudo mv dcos /bin/dcos
+
+git clone https://github.com/nlsun/dcos-netbench.git
