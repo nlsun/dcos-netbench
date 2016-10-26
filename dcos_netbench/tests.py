@@ -7,8 +7,6 @@ import time
 
 from dcos_netbench import util
 
-# XXX Does not do some of the waiting correctly, some are just sleeps
-
 
 def http_dockeroverlay(config):
     docker_wait(config.ms, config.user)
@@ -109,9 +107,7 @@ def get_hostname(master, user, address):
 def http_bridge(config):
     def bridge_vegeta(unused):
         deploy_wait()
-        time.sleep(5)
-        host, port = bridge_hostport(config.user, "_web._httpd._tcp.marathon.mesos", config.ms)
-        return host + ":" + port
+        return srv_hostport("_web._httpd._tcp.marathon.mesos")
     return http_helper(config.sfile, config.cfile, config.tmpfd,
                        bridge_vegeta, config.ms, config.ag1, config.ag2)
 
@@ -119,7 +115,6 @@ def http_bridge(config):
 def http_host(config):
     def host_vegeta(host):
         deploy_wait()
-        time.sleep(5)
         return host + ":80"
     return http_helper(config.sfile, config.cfile, config.tmpfd,
                        host_vegeta, config.ms, config.ag1, config.ag2)
@@ -128,9 +123,7 @@ def http_host(config):
 def http_overlay(config):
     def overlay_vegeta(unused):
         deploy_wait()
-        time.sleep(30)
-        url = "httpd.marathon.containerip.dcos.thisdcos.directory:80"
-        return url
+        return "httpd.marathon.containerip.dcos.thisdcos.directory:80"
     return http_helper(config.sfile, config.cfile, config.tmpfd,
                        overlay_vegeta, config.ms, config.ag1, config.ag2)
 
@@ -186,8 +179,8 @@ def siege_wait():
 def redis_bridge(config):
     def bridge_bench(unused):
         deploy_wait()
-        time.sleep(5)
-        return bridge_hostport(config.user, "_redis._redis._tcp.marathon.mesos", config.ms)
+        srv = "_redis._redis._tcp.marathon.mesos"
+        return (srv_host(srv), srv_port(srv))
     return redis_helper(config.sfile, config.cfile, config.tmpfd,
                         bridge_bench, config.ms, config.ag1, config.ag2)
 
@@ -195,7 +188,7 @@ def redis_bridge(config):
 def redis_host(config):
     def host_bench(host):
         deploy_wait()
-        time.sleep(5)
+        # time.sleep(5)
         return (host, "6379")
     return redis_helper(config.sfile, config.cfile, config.tmpfd,
                         host_bench, config.ms, config.ag1, config.ag2)
@@ -204,28 +197,22 @@ def redis_host(config):
 def redis_overlay(config):
     def overlay_bench(unused):
         deploy_wait()
-        time.sleep(30)
         url = "redis.marathon.containerip.dcos.thisdcos.directory"
         return (url, "6379")
     return redis_helper(config.sfile, config.cfile, config.tmpfd,
                         overlay_bench, config.ms, config.ag1, config.ag2)
 
 
-def bridge_hostport(user, addr, master):
-    split_port = []
-    while len(split_port) != 8:
-        ssh_comm = ("ssh {}@{} ".format(user, master) +
-                    "-o 'ForwardAgent=yes' " +
-                    "-o 'LogLevel=QUIET' " +
-                    "-o 'StrictHostKeyChecking=no' " +
-                    "-o 'UserKnownHostsFile=/dev/null' " +
-                    "'host -t srv {}'".format(addr))
-        raw_port = subprocess.check_output(shlex.split(ssh_comm))
-        split_port = raw_port.decode().split()
-        time.sleep(1)
-    port = split_port[6]
-    host = split_port[7]
-    return (host, port)
+def srv_hostport(srv):
+    return "{}:{}".format(srv_host(srv), srv_port(srv))
+
+
+def srv_host(srv):
+    return "$(host -t srv {} | cut -f8 -d' ')".format(srv)
+
+
+def srv_port(srv):
+    return "$(host -t srv {} | cut -f7 -d' ')".format(srv)
 
 
 def redis_check(output):
@@ -267,16 +254,18 @@ def gen_siege(host):
             "sleep infinity\"").format(host, host)
 
 
-def gen_vegeta(host):
-    return ("echo 'GET http://{}/' | vegeta attack -duration=5s >/dev/null && " +
-            "echo 'GET http://{}/' | vegeta attack -duration=1m | " +
-            "vegeta report -reporter=json && sleep infinity").format(host, host)
+def gen_vegeta(get_host):
+    return ('export NETBENCH_HOST="{}" && '.format(get_host) +
+            'curl --fail $NETBENCH_HOST && ' +
+            'echo "GET http://$NETBENCH_HOST/" | vegeta attack -duration=5s >/dev/null && ' +
+            'echo "GET http://$NETBENCH_HOST/" | vegeta attack -duration=1m | ' +
+            'vegeta report -reporter=json && sleep infinity')
 
 
 def gen_redis_bench(tup):
-    host, port = tup
-    return ("sleep 10 && redis-benchmark --csv -h {} -p {} && " +
-            "sleep infinity").format(host, port)
+    get_host, get_port = tup
+    return ('sleep 10 && redis-benchmark --csv -h "{}" -p "{}" && ' +
+            'sleep infinity').format(get_host, get_port)
 
 
 def deploy_wait():

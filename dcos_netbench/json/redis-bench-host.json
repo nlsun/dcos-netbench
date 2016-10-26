@@ -7,7 +7,7 @@
   "instances": 1,
   "container": {
     "docker": {
-      "image": "redis",
+      "image": "nlsun/redis",
       "forcePullImage": false,
       "privileged": false,
       "network": "HOST"

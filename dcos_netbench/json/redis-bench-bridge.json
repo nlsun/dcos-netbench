@@ -11,7 +11,7 @@
   "maxLaunchDelaySeconds": 3600,
   "container": {
     "docker": {
-      "image": "redis",
+      "image": "nlsun/redis",
       "forcePullImage": false,
       "privileged": false,
       "portMappings": [
