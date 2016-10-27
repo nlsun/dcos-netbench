@@ -46,11 +46,40 @@ def run(master, os_type, test, net, reps, prefix):
 @click.argument('master', nargs=1)  # Master public IP address
 @click.argument('os_type', nargs=1)
 @click.option('--swarm/--no-swarm', default=False)
-def init(master, os_type, swarm):
-    print('Initializing')
-    print([master, os_type, swarm])
+@click.option('--ttracker/--no-ttracker', default=False)
+def init(master, os_type, swarm, ttracker):
+    print([master, os_type, swarm, ttracker])
     config = Config(os_type, master)
-    util.init_swarm(config)
+    if swarm:
+        print('Initializing Docker Swarm')
+        util.init_swarm(config)
+    if ttracker:
+        print('Initializing ttracker')
+        util.init_ttracker(config)
+
+
+@main.command()
+@click.argument('master', nargs=1)  # Master public IP address
+@click.argument('os_type', nargs=1)
+@click.option('--ttracker/--no-ttracker', default=False)
+def clean(master, os_type, ttracker):
+    print([master, os_type, ttracker])
+    config = Config(os_type, master)
+    if ttracker:
+        print('Cleaning ttracker')
+        util.clean_ttracker(config)
+
+
+@main.command()
+@click.argument('master', nargs=1)  # Master public IP address
+@click.argument('os_type', nargs=1)
+@click.option('--ttracker/--no-ttracker', default=False)
+def fetch(master, os_type, ttracker):
+    print([master, os_type, ttracker])
+    config = Config(os_type, master)
+    if ttracker:
+        print('Fetching ttracker output')
+        util.fetch_ttracker(config)
 
 
 class Config:
