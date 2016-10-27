@@ -264,8 +264,12 @@ def gen_vegeta(get_host):
 
 def gen_redis_bench(tup):
     get_host, get_port = tup
-    return ('sleep 10 && redis-benchmark --csv -h "{}" -p "{}" && ' +
-            'sleep infinity').format(get_host, get_port)
+    return ('export REDISBENCH_HOST="{}" && '.format(get_host) +
+            'export REDISBENCH_PORT="{}" && '.format(get_port) +
+            'netcat -z "$REDISBENCH_HOST" "$REDISBENCH_PORT" && ' +
+            'sleep 10 && ' +
+            'redis-benchmark --csv -h "$REDISBENCH_HOST" -p "$REDISBENCH_PORT" && ' +
+            'sleep infinity')
 
 
 def deploy_wait():
