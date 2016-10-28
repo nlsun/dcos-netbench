@@ -25,7 +25,8 @@ def main():
 @click.option('--reps', '-r', type=click.INT, default=1,
               help="Number of times to run each test (results are averaged)")
 @click.option('--prefix', '-p', help="Set prefix for output files, defaults to timestamp")
-def run(master, os_type, test, net, reps, prefix):
+@click.option('--ttracker/--no-ttracker', default=False)
+def run(master, os_type, test, net, reps, prefix, ttracker):
     valid_os = ["coreos", "centos"]
     if os_type not in valid_os:
         print("'os_type' must be one of {}".format(valid_os))
@@ -34,8 +35,8 @@ def run(master, os_type, test, net, reps, prefix):
     net_type = set(net.split(","))
 
     print('Running benchmarks')
-    print([master, os_type, test_type, net_type, reps, prefix])
-    config = Config(os_type, master, test_type, net_type, prefix)
+    print([master, os_type, test_type, net_type, reps, prefix, ttracker])
+    config = Config(os_type, master, test_type, net_type, prefix, ttracker)
     tester = Tester(config)
     tester.run(reps)
     tester.parse_results()
@@ -88,13 +89,14 @@ class Config:
     This class should be treated as read-only except through public functions
     """
 
-    def __init__(self, os_type, master_address, test_types=None, net_types=None, prefix=None):
+    def __init__(self, os_type, master_address, test_types=None, net_types=None, prefix=None, ttracker=False):
         self.dnet = "my-net"  # Name of Docker overlay network
         self.all_test = set(["http", "redis"])
         self.all_net = set(["bridge", "overlay", "dockeroverlay", "host"])
 
         self.os = os_type
         self.ms = master_address  # public address
+        self.ttracker = ttracker
 
         self.user = self.get_user(self.os)
         self.ag1, self.ag2 = self.get_agents(master_address, self.user)  # private address

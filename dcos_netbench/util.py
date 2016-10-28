@@ -3,7 +3,7 @@ import shlex
 import subprocess
 
 ttracker = "ttracker"  # path to ttracker executable
-ttracker_url = "https://github.com/nlsun/ttracker/releases/download/v0.1.0/ttracker_linux_amd64"
+ttracker_url = "https://github.com/nlsun/ttracker/releases/download/v0.1.1/ttracker_linux_amd64"
 
 def reset_file(file_fd):
     file_fd.seek(0)
@@ -53,12 +53,18 @@ def agent_swarm(user, master, agent, token, advertise_addr):
     print(comm)
     return subprocess.call(shlex.split(comm))
 
-def allnodes(master, user):
+def masters(master, user):
+    return dnslookup(master, user, "master.mesos")
+
+def agents(master, user):
+    return dnslookup(master, user, "slave.mesos")
+
+def dnslookup(master, user, dnsaddr):
     """
     Return a list of node addresses
     """
     comm = ('ssh -o "StrictHostKeyChecking=no" {}@{} '.format(user, master) +
-            '"host master.mesos && host slave.mesos"')
+            '"host {}"'.format(dnsaddr))
     nodes = []
     for ln in subprocess.check_output(shlex.split(comm)).decode().splitlines():
         nodes.append(ln.strip().split()[3])
@@ -68,12 +74,14 @@ def allnodes(master, user):
 def init_ttracker(config):
     user = config.user
     master = config.ms
-    for nd in allnodes(master, user):
+    masternodes = masters(master, user)
+    agentnodes = agents(master, user)
+    for nd in masternodes + agentnodes:
         """
         - All quotes require 1 slash to be escaped from python
           and then another 2 slashes to produce a slash to escape in the shell.
         - All dollar signs need to be escaped in the shell so they don't
-          evaluate immediately
+          evaluate immediately in the SSH
         """
         comm = ("""ssh -A -o StrictHostKeyChecking=no {}@{} """.format(user, master) +
                 """'ssh -o StrictHostKeyChecking=no {} """.format(nd) +
@@ -91,12 +99,29 @@ def init_ttracker(config):
                 """' """)
         print(comm)
         subprocess.call(shlex.split(comm))
+    # XXX This command might fail because file may not exist, file may be empty,
+    #      etc. use loops and checks to make this more robust?
+    comm = ("""ssh -A -o StrictHostKeyChecking=no {}@{} """.format(user, master) +
+            """'ssh -o StrictHostKeyChecking=no {} """ +
+            """ "curl -H \\\"Content-Type: application/json\\\" """ +
+            """   -X PUT -d \\\"{{\\\\\\\"value\\\\\\\": \\\\\\\"nodetype:{}\\\\\\\"}}\\\" """ +
+            """   \\\"\$(cat \\\"\$(hostname)_addr.log\\\")/hook\\\" """ +
+            """ " """ +
+            """' """)
+    for nd in masternodes:
+        runcomm = comm.format(nd, "Master")
+        print(runcomm)
+        subprocess.call(shlex.split(runcomm))
+    for nd in agentnodes:
+        runcomm = comm.format(nd, "Agent")
+        print(runcomm)
+        subprocess.call(shlex.split(runcomm))
 
 
 def clean_ttracker(config):
     user = config.user
     master = config.ms
-    for nd in allnodes(master, user):
+    for nd in masters(master, user) + agents(master, user):
         comm = ("""ssh -A -o StrictHostKeyChecking=no {}@{} """.format(user, master) +
                 """'ssh -o StrictHostKeyChecking=no {} """.format(nd) +
                 """ "sudo systemctl stop ttracker" """ +
@@ -120,7 +145,7 @@ def fetch_ttracker(config):
         os.mkdir(outdir)
     except OSError as e:
         print("OSError: {}".format(e))
-    for nd in allnodes(master, user):
+    for nd in masters(master, user) + agents(master, user):
         """
         The format of the output is:
 
