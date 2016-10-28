@@ -248,28 +248,37 @@ def redis_helper(server_file, client_file, tmp_file, get_bench,
     return raw_log.decode()
 
 
-def gen_siege(host):
-    return ("bash -c \"siege -b --time=5s {} > /dev/null && " +
-            "(siege -b -c 1 -t 1m {} 3>&2 2>&1 1>&3) 2>/dev/null && " +
-            "sleep infinity\"").format(host, host)
+# def gen_siege(host):
+#     comm = ("bash -c \"siege -b --time=5s {host} > /dev/null && " +
+#             "(siege -b -c 1 -t 1m {host} 3>&2 2>&1 1>&3) 2>/dev/null && " +
+#             "{postfix}" +
+#             "sleep infinity\"").format(host=host, host=host)
 
+vegeta_str = """\
+{prefix} export NETBENCH_HOST="{host}" && \
+curl --fail $NETBENCH_HOST && \
+echo "GET http://$NETBENCH_HOST/" | vegeta attack -duration=5s >/dev/null && \
+echo "GET http://$NETBENCH_HOST/" | vegeta attack -duration=1m | \
+vegeta report -reporter=json && \
+{postfix} sleep infinity
+"""
 
-def gen_vegeta(get_host):
-    return ('export NETBENCH_HOST="{}" && '.format(get_host) +
-            'curl --fail $NETBENCH_HOST && ' +
-            'echo "GET http://$NETBENCH_HOST/" | vegeta attack -duration=5s >/dev/null && ' +
-            'echo "GET http://$NETBENCH_HOST/" | vegeta attack -duration=1m | ' +
-            'vegeta report -reporter=json && sleep infinity')
+def gen_vegeta(get_host, prefix="", postfix=""):
+    return vegeta_str.format(host=get_host, prefix=prefix, postfix=postfix)
 
+redis_bench_str = """\
+{prefix} export REDISBENCH_HOST="{host}" && \
+export REDISBENCH_PORT="{port}" && \
+netcat -z "$REDISBENCH_HOST" "$REDISBENCH_PORT" && \
+sleep 10 && \
+redis-benchmark --csv -h "$REDISBENCH_HOST" -p "$REDISBENCH_PORT" && \
+{postfix} sleep infinity
+"""
 
-def gen_redis_bench(tup):
+def gen_redis_bench(tup, prefix="", postfix=""):
     get_host, get_port = tup
-    return ('export REDISBENCH_HOST="{}" && '.format(get_host) +
-            'export REDISBENCH_PORT="{}" && '.format(get_port) +
-            'netcat -z "$REDISBENCH_HOST" "$REDISBENCH_PORT" && ' +
-            'sleep 10 && ' +
-            'redis-benchmark --csv -h "$REDISBENCH_HOST" -p "$REDISBENCH_PORT" && ' +
-            'sleep infinity')
+    return redis_bench_str.format(host=get_host, port=get_port, prefix=prefix,
+                                  postfix=postfix)
 
 
 def deploy_wait():
