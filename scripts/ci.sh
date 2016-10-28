@@ -23,7 +23,8 @@ run_tests() {
         LC_ALL=C.UTF-8 \
         LANG=C.UTF-8 \
         $SHELL -c "source env/bin/activate && \
-            python env/bin/dcos-netbench run $MASTERIP $OS --test $TTYPE --net $NTYPE --reps $REPS --prefix $PREFIX"
+            python env/bin/dcos-netbench init --ttracker $MASTERIP $OS && \
+            python env/bin/dcos-netbench run $MASTERIP $OS --test $TTYPE --net $NTYPE --reps $REPS --prefix $PREFIX --ttracker"
 }
 
 output_files() {
