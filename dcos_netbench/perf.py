@@ -73,10 +73,11 @@ def clean(master, os_type, ttracker):
 @main.command()
 @click.argument('master', nargs=1)  # Master public IP address
 @click.argument('os_type', nargs=1)
+@click.option('--prefix', '-p', help="Set prefix for output files, defaults to timestamp")
 @click.option('--ttracker/--no-ttracker', default=False)
-def fetch(master, os_type, ttracker):
-    print([master, os_type, ttracker])
-    config = Config(os_type, master)
+def fetch(master, os_type, prefix, ttracker):
+    print([master, os_type, prefix, ttracker])
+    config = Config(os_type, master, prefix=prefix)
     if ttracker:
         print('Fetching ttracker output')
         util.fetch_ttracker(config)

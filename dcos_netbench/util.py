@@ -1,3 +1,4 @@
+import os
 import shlex
 import subprocess
 
@@ -65,17 +66,15 @@ def allnodes(master, user):
 
 
 def init_ttracker(config):
-    # for each master+agent:
-    #   download ttracker, rename executable to ttracker
-    #   get the pid of the processes that you need
-    #   run and disown ttracker to detach
     user = config.user
     master = config.ms
     for nd in allnodes(master, user):
-        # - All quotes require 1 slash to be escaped from python
-        #   and then another 2 slashes to produce a slash to escape in the shell.
-        # - All dollar signs need to be escaped in the shell so they don't
-        #   evaluate immediately
+        """
+        - All quotes require 1 slash to be escaped from python
+          and then another 2 slashes to produce a slash to escape in the shell.
+        - All dollar signs need to be escaped in the shell so they don't
+          evaluate immediately
+        """
         comm = ("""ssh -A -o StrictHostKeyChecking=no {}@{} """.format(user, master) +
                 """'ssh -o StrictHostKeyChecking=no {} """.format(nd) +
                 """ "curl -L -o {} {} && """.format(ttracker, ttracker_url) +
@@ -93,9 +92,8 @@ def init_ttracker(config):
         print(comm)
         subprocess.call(shlex.split(comm))
 
+
 def clean_ttracker(config):
-    # for each master+agent:
-    #   kill all instances of ttracker
     user = config.user
     master = config.ms
     for nd in allnodes(master, user):
@@ -105,6 +103,68 @@ def clean_ttracker(config):
                 """' """)
         subprocess.call(shlex.split(comm))
 
+
 def fetch_ttracker(config):
-    # Fetch all relevant ttracker output
-    pass
+    """
+    Creates a directory with the same prefix as used elsewhere and sticks
+    all of the files output by ttracker into there
+    """
+    user = config.user
+    master = config.ms
+    newfile_marker = "DCOS_NETBENCH_NEWFILE"
+    logfile_buffer = None
+    logfile_name = None
+    incoming_filename = False
+    outdir = "{}ttracker_out".format(config.prefix)
+    try:
+        os.mkdir(outdir)
+    except OSError as e:
+        print("OSError: {}".format(e))
+    for nd in allnodes(master, user):
+        """
+        The format of the output is:
+
+        DCOS_NETBENCH_NEWFILE
+        <filename1>
+        <file1 content>
+        DCOS_NETBENCH_NEWFILE
+        <filename2>
+        <file2 content>
+        ...
+
+        """
+        comm = ("""ssh -A -o StrictHostKeyChecking=no {}@{} """.format(user, master) +
+                """'ssh -o StrictHostKeyChecking=no {} """.format(nd) +
+                """ "for fl in \$(hostname)*; do """ +
+                """    echo \\\"{}\\\" && """.format(newfile_marker) +
+                """    echo \${fl} && """ +
+                """    cat \${fl} && """ +
+                """    echo \\\"\\\" ; """ +
+                """  done """ +
+                """ " """ +
+                """' """)
+        print(comm)
+        output = subprocess.check_output(shlex.split(comm))
+        for line in output.decode().splitlines():
+            if line == newfile_marker:
+                if not (logfile_name is None and logfile_buffer is None):
+                    flush_to_file(logfile_name, logfile_buffer)
+                logfile_buffer = ""
+                logfile_name = ""
+                incoming_filename = True
+                continue
+            if incoming_filename == True:
+                logfile_name = os.path.join(outdir, line)
+                incoming_filename = False
+                continue
+            logfile_buffer += line + os.linesep
+        if not (logfile_name is None and logfile_buffer is None):
+            flush_to_file(logfile_name, logfile_buffer)
+
+
+def flush_to_file(filename, filecontent):
+    fd = open(filename, 'w+')
+    fd.truncate()
+    fd.write(filecontent)
+    fd.flush()
+    fd.close()
