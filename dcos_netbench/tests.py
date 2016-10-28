@@ -109,7 +109,8 @@ def http_bridge(config):
         deploy_wait()
         return srv_hostport("_web._httpd._tcp.marathon.mesos")
     return http_helper(config.sfile, config.cfile, config.tmpfd,
-                       bridge_vegeta, config.ms, config.ag1, config.ag2)
+                       bridge_vegeta, config.ms, config.ag1, config.ag2,
+                       config.ttracker, "http_bridge")
 
 
 def http_host(config):
@@ -117,7 +118,8 @@ def http_host(config):
         deploy_wait()
         return host + ":80"
     return http_helper(config.sfile, config.cfile, config.tmpfd,
-                       host_vegeta, config.ms, config.ag1, config.ag2)
+                       host_vegeta, config.ms, config.ag1, config.ag2,
+                       config.ttracker, "http_host")
 
 
 def http_overlay(config):
@@ -125,11 +127,12 @@ def http_overlay(config):
         deploy_wait()
         return "httpd.marathon.containerip.dcos.thisdcos.directory:80"
     return http_helper(config.sfile, config.cfile, config.tmpfd,
-                       overlay_vegeta, config.ms, config.ag1, config.ag2)
+                       overlay_vegeta, config.ms, config.ag1, config.ag2,
+                       config.ttracker, "http_overlay")
 
 
 def http_helper(server_file, client_file, tmp_file, get_vegeta,
-                master, agent1, agent2):
+                master, agent1, agent2, ttracker, testid):
     deploy_wait()
     server_fd = open(server_file, 'r')
     server_json = json.load(server_fd)
@@ -140,7 +143,12 @@ def http_helper(server_file, client_file, tmp_file, get_vegeta,
     subprocess.call(shlex.split("dcos marathon app add " + tmp_file.name))
     client_fd = open(client_file, 'r')
     client_json = json.load(client_fd)
-    client_json["cmd"] = gen_vegeta(get_vegeta(agent1))
+    if ttracker:
+        pre = util.test_ttracker_hook(agent1, "{}_begin".format(testid))
+        post = util.test_ttracker_hook(agent1, "{}_end".format(testid))
+        client_json["cmd"] = gen_vegeta(get_vegeta(agent1), pre, post)
+    else:
+        client_json["cmd"] = gen_vegeta(get_vegeta(agent1))
     client_json["constraints"] = [["hostname", "LIKE", agent2]]
     util.reset_file(tmp_file)
     tmp_file.write(json.dumps(client_json))
@@ -182,16 +190,17 @@ def redis_bridge(config):
         srv = "_redis._redis._tcp.marathon.mesos"
         return (srv_host(srv), srv_port(srv))
     return redis_helper(config.sfile, config.cfile, config.tmpfd,
-                        bridge_bench, config.ms, config.ag1, config.ag2)
+                        bridge_bench, config.ms, config.ag1, config.ag2,
+                        config.ttracker, "redis_bridge")
 
 
 def redis_host(config):
     def host_bench(host):
         deploy_wait()
-        # time.sleep(5)
         return (host, "6379")
     return redis_helper(config.sfile, config.cfile, config.tmpfd,
-                        host_bench, config.ms, config.ag1, config.ag2)
+                        host_bench, config.ms, config.ag1, config.ag2,
+                        config.ttracker, "redis_host")
 
 
 def redis_overlay(config):
@@ -200,7 +209,8 @@ def redis_overlay(config):
         url = "redis.marathon.containerip.dcos.thisdcos.directory"
         return (url, "6379")
     return redis_helper(config.sfile, config.cfile, config.tmpfd,
-                        overlay_bench, config.ms, config.ag1, config.ag2)
+                        overlay_bench, config.ms, config.ag1, config.ag2,
+                        config.ttracker, "redis_overlay")
 
 
 def srv_hostport(srv):
@@ -220,7 +230,7 @@ def redis_check(output):
 
 
 def redis_helper(server_file, client_file, tmp_file, get_bench,
-                 master, agent1, agent2):
+                 master, agent1, agent2, ttracker, testid):
     deploy_wait()
     server_fd = open(server_file, 'r')
     server_json = json.load(server_fd)
@@ -231,7 +241,12 @@ def redis_helper(server_file, client_file, tmp_file, get_bench,
     subprocess.call(shlex.split("dcos marathon app add " + tmp_file.name))
     client_fd = open(client_file, 'r')
     client_json = json.load(client_fd)
-    client_json["cmd"] = gen_redis_bench(get_bench(agent1))
+    if ttracker:
+        pre = util.test_ttracker_hook(agent1, "{}_begin".format(testid))
+        post = util.test_ttracker_hook(agent1, "{}_end".format(testid))
+        client_json["cmd"] = gen_redis_bench(get_bench(agent1), pre, post)
+    else:
+        client_json["cmd"] = gen_redis_bench(get_bench(agent1))
     client_json["constraints"] = [["hostname", "LIKE", agent2]]
     util.reset_file(tmp_file)
     tmp_file.write(json.dumps(client_json))
@@ -255,9 +270,10 @@ def redis_helper(server_file, client_file, tmp_file, get_bench,
 #             "sleep infinity\"").format(host=host, host=host)
 
 vegeta_str = """\
-{prefix} export NETBENCH_HOST="{host}" && \
+export NETBENCH_HOST="{host}" && \
 curl --fail $NETBENCH_HOST && \
 echo "GET http://$NETBENCH_HOST/" | vegeta attack -duration=5s >/dev/null && \
+{prefix} \
 echo "GET http://$NETBENCH_HOST/" | vegeta attack -duration=1m | \
 vegeta report -reporter=json && \
 {postfix} sleep infinity
@@ -267,10 +283,11 @@ def gen_vegeta(get_host, prefix="", postfix=""):
     return vegeta_str.format(host=get_host, prefix=prefix, postfix=postfix)
 
 redis_bench_str = """\
-{prefix} export REDISBENCH_HOST="{host}" && \
+export REDISBENCH_HOST="{host}" && \
 export REDISBENCH_PORT="{port}" && \
 netcat -z "$REDISBENCH_HOST" "$REDISBENCH_PORT" && \
 sleep 10 && \
+{prefix} \
 redis-benchmark --csv -h "$REDISBENCH_HOST" -p "$REDISBENCH_PORT" && \
 {postfix} sleep infinity
 """

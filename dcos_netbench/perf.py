@@ -41,6 +41,8 @@ def run(master, os_type, test, net, reps, prefix, ttracker):
     tester.run(reps)
     tester.parse_results()
     tester.dump_results()
+    if ttracker:
+        util.fetch_ttracker(config)
 
 
 @main.command()

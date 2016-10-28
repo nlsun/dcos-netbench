@@ -4,6 +4,7 @@ import subprocess
 
 ttracker = "ttracker"  # path to ttracker executable
 ttracker_url = "https://github.com/nlsun/ttracker/releases/download/v0.1.1/ttracker_linux_amd64"
+ttracker_port = "38845"
 
 def reset_file(file_fd):
     file_fd.seek(0)
@@ -94,13 +95,13 @@ def init_ttracker(config):
                 # Remove first character, which is an extra semicolon
                 """  export BENCHSPEC=\\\"\$(printf \\\"\$BENCHSPEC\\\" | cut -c 2-)\\\" && """ +
                 """  echo \\\"\$BENCHSPEC\\\" && echo \$(hostname) && """ +
-                """  sudo systemd-run --unit ttracker ./ttracker -spec \\\"\$BENCHSPEC\\\" -prefix \\\"\$HOME/\$(hostname)\\\" """ +
+                """  sudo systemd-run --unit ttracker ./ttracker -spec \\\"\$BENCHSPEC\\\" -prefix \\\"\$HOME/\$(hostname)\\\" -addr 0.0.0.0:{} """.format(ttracker_port) +
                 """ " """ +
                 """' """)
         print(comm)
         subprocess.call(shlex.split(comm))
     # XXX This command might fail because file may not exist, file may be empty,
-    #      etc. use loops and checks to make this more robust?
+    #     etc. use loops and checks to make this more robust?
     comm = ("""ssh -A -o StrictHostKeyChecking=no {}@{} """.format(user, master) +
             """'ssh -o StrictHostKeyChecking=no {} """ +
             """ "curl -H \\\"Content-Type: application/json\\\" """ +
@@ -185,6 +186,16 @@ def fetch_ttracker(config):
             logfile_buffer += line + os.linesep
         if not (logfile_name is None and logfile_buffer is None):
             flush_to_file(logfile_name, logfile_buffer)
+
+test_ttracker_hook_str = """\
+curl -H "Content-Type: application/json" \
+ -X PUT -d '{{"value": "testnotify:{hookmsg}"}}' \
+ "{ttracker_host}:{ttracker_port}/hook" && \
+"""
+def test_ttracker_hook(ttracker_host, hookmsg):
+    return test_ttracker_hook_str.format(hookmsg=hookmsg,
+                                         ttracker_host=ttracker_host,
+                                         ttracker_port=ttracker_port)
 
 
 def flush_to_file(filename, filecontent):
