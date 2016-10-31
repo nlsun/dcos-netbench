@@ -1,9 +1,7 @@
 #!/bin/bash
 set -o errexit -o nounset -o pipefail
 
-status_line() {
-    printf "\n### $1 ###\n\n"
-}
+source scripts/ci_lib.sh
 
 run_tests() {
     CONFIG=$1
@@ -39,7 +37,7 @@ output_files() {
 
 CCM_AUTH_TOKEN=$1
 BUILD_NUMBER=$2
-TESTREPS=$3         # 5
+TESTREPS=$3         # 10
 DCOS_CHANNEL=$4     # "testing/master"
 CF_TEMPLATE_NAME=$5 # "ee.single-master.cloudformation.json"
 OS_TYPE=$6          # centos
@@ -50,8 +48,8 @@ TAGID="${OS_TYPE}${BUILD_NUMBER}"
 CLUSTER_NAME="DCOSNETWORKPERF-${TAGID}"
 CONFIG_PATH="/tmp/dcos_${TAGID}.toml"
 
-status_line "Printing parameters"
 shift # keep stuff hidden
+status_line "Printing parameters"
 echo $@
 
 echo "$TAGID"
