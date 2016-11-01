@@ -33,6 +33,8 @@ output_files() {
     done
 }
 
+### Main ###
+
 # The SSH key is expected to be in the SSH Agent already
 
 CCM_AUTH_TOKEN=$1
@@ -55,6 +57,9 @@ echo $@
 echo "$TAGID"
 echo "$CLUSTER_NAME"
 echo "$CONFIG_PATH"
+
+status_line "Initializing"
+pip3 install matplotlib
 
 status_line "Start CCM"
 CLUSTER_ID=$(DCOS_CHANNEL=$DCOS_CHANNEL \
@@ -92,3 +97,6 @@ CLUSTER_ID=$CLUSTER_ID \
 
 status_line "Printing results to stdout"
 output_files ${TAGID}*.csv
+
+status_line "Generating plots"
+python3 scripts/perfplot.py $(echo *ttracker_out)
