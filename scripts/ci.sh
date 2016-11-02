@@ -59,6 +59,8 @@ echo "$CLUSTER_NAME"
 echo "$CONFIG_PATH"
 
 status_line "Initializing"
+# Just in case pip3 isn't installed
+type pip3 || apt-get update && apt-get install -y python3-pip
 pip3 install matplotlib
 
 status_line "Start CCM"
