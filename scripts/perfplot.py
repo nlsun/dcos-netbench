@@ -38,9 +38,17 @@ def main():
     plt.savefig(os.path.join(datadir, 'plot.pdf'), bbox_inches='tight')
     mkplot(lines, hooks, genhook=False)
     plt.savefig(os.path.join(datadir, 'plot_nohook.pdf'), bbox_inches='tight')
+    mkplot(lines, hooks, master=False)
+    plt.savefig(os.path.join(datadir, 'agentplot.pdf'), bbox_inches='tight')
+    mkplot(lines, hooks, master=False, genhook=False)
+    plt.savefig(os.path.join(datadir, 'agentplot_nohook.pdf'), bbox_inches='tight')
+    mkplot(lines, hooks, agent=False)
+    plt.savefig(os.path.join(datadir, 'masterplot.pdf'), bbox_inches='tight')
+    mkplot(lines, hooks, agent=False, genhook=False)
+    plt.savefig(os.path.join(datadir, 'masterplot_nohook.pdf'), bbox_inches='tight')
 
-def mkplot(lines, hooks, genhook=True):
-    fig = plt.figure(figsize=(10, 10))
+def mkplot(lines, hooks, genhook=True, master=True, agent=True):
+    fig = plt.figure(figsize=(40, 10))
 
     xmin = int(lines[0].x[0])
     xmax = int(lines[0].x[-1])
@@ -76,6 +84,8 @@ def mkplot(lines, hooks, genhook=True):
         subplots[hookplot].set_xlim([xmin, xmax])
 
     for ln in lines:
+        if (not master and ln.master()) or (not agent and ln.agent()):
+            continue
         if ln.master():
             subplots[ln.proc].plot(ln.x, ln.y, color=ln.color)
         elif ln.agent():
