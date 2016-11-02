@@ -11,7 +11,6 @@ matplotlib.use('Agg')
 
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 import datetime
 import numpy as np
 import sys
