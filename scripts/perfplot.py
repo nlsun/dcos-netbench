@@ -4,6 +4,11 @@
 
 import csv
 import matplotlib
+
+# This MUST be called before any other matplotlib imports for this to work
+# in a headless (server) environment
+matplotlib.use('Agg')
+
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
