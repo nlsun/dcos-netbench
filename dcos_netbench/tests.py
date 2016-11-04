@@ -279,6 +279,7 @@ vegeta report -reporter=json && \
 {postfix} sleep infinity
 """
 
+
 def gen_vegeta(get_host, prefix="", postfix=""):
     return vegeta_str.format(host=get_host, prefix=prefix, postfix=postfix)
 
@@ -291,6 +292,7 @@ sleep 10 && \
 redis-benchmark --csv -h "$REDISBENCH_HOST" -p "$REDISBENCH_PORT" && \
 {postfix} sleep infinity
 """
+
 
 def gen_redis_bench(tup, prefix="", postfix=""):
     get_host, get_port = tup

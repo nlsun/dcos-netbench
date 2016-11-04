@@ -6,6 +6,7 @@ ttracker = "ttracker"  # path to ttracker executable
 ttracker_url = "https://github.com/nlsun/ttracker/releases/download/v0.1.1/ttracker_linux_amd64"
 ttracker_port = "38845"
 
+
 def reset_file(file_fd):
     file_fd.seek(0)
     file_fd.truncate()
@@ -54,11 +55,14 @@ def agent_swarm(user, master, agent, token, advertise_addr):
     print(comm)
     return subprocess.call(shlex.split(comm))
 
+
 def masters(master, user):
     return dnslookup(master, user, "master.mesos")
 
+
 def agents(master, user):
     return dnslookup(master, user, "slave.mesos")
+
 
 def dnslookup(master, user, dnsaddr):
     """
@@ -90,12 +94,14 @@ def init_ttracker(config):
                 """  chmod 755 {} && """.format(ttracker) +
                 """  export BENCHSPEC='' && """ +
                 """  for pid in \$(pgrep beam.smp); do """ +
-                """    export BENCHSPEC=\\\"\${BENCHSPEC};\$(basename \$(sudo readlink -f /proc/\${pid}/cwd)),\${pid}\\\" ; """ +
+                """    export BENCHSPEC=\\\"\${BENCHSPEC};\$(basename """ +
+                """      \$(sudo readlink -f /proc/\${pid}/cwd)),\${pid}\\\" ; """ +
                 """  done && """ +
                 # Remove first character, which is an extra semicolon
                 """  export BENCHSPEC=\\\"\$(printf \\\"\$BENCHSPEC\\\" | cut -c 2-)\\\" && """ +
                 """  echo \\\"\$BENCHSPEC\\\" && echo \$(hostname) && """ +
-                """  sudo systemd-run --unit ttracker ./ttracker -spec \\\"\$BENCHSPEC\\\" -prefix \\\"\$HOME/\$(hostname)\\\" -addr 0.0.0.0:{} """.format(ttracker_port) +
+                """  sudo systemd-run --unit ttracker ./ttracker -spec \\\"\$BENCHSPEC\\\" """ +
+                """    -prefix \\\"\$HOME/\$(hostname)\\\" -addr 0.0.0.0:{} """.format(ttracker_port) +
                 """ " """ +
                 """' """)
         print(comm)
@@ -179,7 +185,7 @@ def fetch_ttracker(config):
                 logfile_name = ""
                 incoming_filename = True
                 continue
-            if incoming_filename == True:
+            if incoming_filename:
                 logfile_name = os.path.join(outdir, line)
                 incoming_filename = False
                 continue
@@ -192,6 +198,8 @@ curl -H "Content-Type: application/json" \
  -X PUT -d '{{"value": "testnotify:{hookmsg}"}}' \
  "{ttracker_host}:{ttracker_port}/hook" && \
 """
+
+
 def test_ttracker_hook(ttracker_host, hookmsg):
     return test_ttracker_hook_str.format(hookmsg=hookmsg,
                                          ttracker_host=ttracker_host,
