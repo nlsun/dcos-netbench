@@ -26,7 +26,8 @@ def main():
               help="Number of times to run each test (results are averaged)")
 @click.option('--prefix', '-p', help="Set prefix for output files, defaults to timestamp")
 @click.option('--ttracker/--no-ttracker', default=False)
-def run(master, os_type, test, net, reps, prefix, ttracker):
+@click.option('--user', '-u', help="Set the user, overrides default user")
+def run(master, os_type, test, net, reps, prefix, ttracker, user):
     valid_os = ["coreos", "centos"]
     if os_type not in valid_os:
         print("'os_type' must be one of {}".format(valid_os))
@@ -35,8 +36,8 @@ def run(master, os_type, test, net, reps, prefix, ttracker):
     net_type = set(net.split(","))
 
     print('Running benchmarks')
-    print([master, os_type, test_type, net_type, reps, prefix, ttracker])
-    config = Config(os_type, master, test_type, net_type, prefix, ttracker)
+    print([master, os_type, test_type, net_type, reps, prefix, ttracker, user])
+    config = Config(os_type, master, test_type, net_type, prefix, ttracker, user)
     tester = Tester(config)
     tester.run(reps)
     tester.parse_results()
@@ -50,9 +51,10 @@ def run(master, os_type, test, net, reps, prefix, ttracker):
 @click.argument('os_type', nargs=1)
 @click.option('--swarm/--no-swarm', default=False)
 @click.option('--ttracker/--no-ttracker', default=False)
-def init(master, os_type, swarm, ttracker):
-    print([master, os_type, swarm, ttracker])
-    config = Config(os_type, master)
+@click.option('--user', '-u', help="Set the user, overrides default user")
+def init(master, os_type, swarm, ttracker, user):
+    print([master, os_type, swarm, ttracker, user])
+    config = Config(os_type, master, user=user)
     if swarm:
         print('Initializing Docker Swarm')
         util.init_swarm(config)
@@ -65,9 +67,10 @@ def init(master, os_type, swarm, ttracker):
 @click.argument('master', nargs=1)  # Master public IP address
 @click.argument('os_type', nargs=1)
 @click.option('--ttracker/--no-ttracker', default=False)
-def clean(master, os_type, ttracker):
-    print([master, os_type, ttracker])
-    config = Config(os_type, master)
+@click.option('--user', '-u', help="Set the user, overrides default user")
+def clean(master, os_type, ttracker, user):
+    print([master, os_type, ttracker, user])
+    config = Config(os_type, master, user=user)
     if ttracker:
         print('Cleaning ttracker')
         util.clean_ttracker(config)
@@ -78,12 +81,14 @@ def clean(master, os_type, ttracker):
 @click.argument('os_type', nargs=1)
 @click.option('--prefix', '-p', help="Set prefix for output files, defaults to timestamp")
 @click.option('--ttracker/--no-ttracker', default=False)
-def fetch(master, os_type, prefix, ttracker):
-    print([master, os_type, prefix, ttracker])
-    config = Config(os_type, master, prefix=prefix)
+@click.option('--user', '-u', help="Set the user, overrides default user")
+@click.option('--fetchdir', '-d', help="The directory that contains the files, remotely")
+def fetch(master, os_type, prefix, ttracker, user, fetchdir):
+    print([master, os_type, prefix, ttracker, user, fetchdir])
+    config = Config(os_type, master, prefix=prefix, user=user)
     if ttracker:
         print('Fetching ttracker output')
-        util.fetch_ttracker(config)
+        util.fetch_ttracker(config, fetchdir)
 
 
 class Config:
@@ -91,7 +96,8 @@ class Config:
     This class should be treated as read-only except through public functions
     """
 
-    def __init__(self, os_type, master_address, test_types=None, net_types=None, prefix=None, ttracker=False):
+    def __init__(self, os_type, master_address, test_types=None,
+                 net_types=None, prefix=None, ttracker=False, user=None):
         self.dnet = "my-net"  # Name of Docker overlay network
         self.all_test = set(["http", "redis"])
         self.all_net = set(["bridge", "overlay", "dockeroverlay", "host"])
@@ -100,7 +106,10 @@ class Config:
         self.ms = master_address  # public address
         self.ttracker = ttracker
 
-        self.user = self.get_user(self.os)
+        if user is None:
+            self.user = self.get_user(self.os)
+        else:
+            self.user = user
         self.ag1, self.ag2 = self.get_agents(master_address, self.user)  # private address
         self.os_id = self.get_os_id(self.os)
         self.tmpfd = tempfile.NamedTemporaryFile(mode="w+")

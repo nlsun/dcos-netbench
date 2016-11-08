@@ -136,7 +136,7 @@ def clean_ttracker(config):
         subprocess.call(shlex.split(comm))
 
 
-def fetch_ttracker(config):
+def fetch_ttracker(config, fetchdir=None):
     """
     Creates a directory with the same prefix as used elsewhere and sticks
     all of the files output by ttracker into there
@@ -148,6 +148,10 @@ def fetch_ttracker(config):
     logfile_name = None
     incoming_filename = False
     outdir = "{}ttracker_out".format(config.prefix)
+    remote_dir = ""
+    if fetchdir is not None:
+        remote_dir = fetchdir + "/"
+
     try:
         os.mkdir(outdir)
     except OSError as e:
@@ -167,9 +171,9 @@ def fetch_ttracker(config):
         """
         comm = ("""ssh -A -o StrictHostKeyChecking=no {}@{} """.format(user, master) +
                 """'ssh -o StrictHostKeyChecking=no {} """.format(nd) +
-                """ "for fl in \$(hostname)*; do """ +
+                """ "for fl in {}\$(hostname)*; do """.format(remote_dir) +
                 """    echo \\\"{}\\\" && """.format(newfile_marker) +
-                """    echo \${fl} && """ +
+                """    echo \$(basename \${fl}) && """ +
                 """    cat \${fl} && """ +
                 """    echo \\\"\\\" ; """ +
                 """  done """ +
