@@ -23,6 +23,11 @@ def error(msg):
 def main():
     datadir = sys.argv[1]
 
+    if len(sys.argv) > 2:
+        figsize = [int(x) for x in sys.argv[2].split(",")]
+    else:
+        figsize = (40, 10)  # x-axis, y-axis length
+
     matplotlib.style.use('ggplot')
 
     filenames = None
@@ -33,22 +38,88 @@ def main():
         error("'{}' not valid dir".format(datadir))
 
     (lines, hooks) = parse(datadir, filenames)
+    combolines = mkcombolines(lines)
+    combofigsize = (figsize[0], figsize[1]/2)
 
-    mkplot(lines, hooks)
+    mkplot(lines, hooks, figsize)
     plt.savefig(os.path.join(datadir, 'plot.pdf'), bbox_inches='tight')
-    mkplot(lines, hooks, genhook=False)
+    mkplot(lines, hooks, figsize, genhook=False)
     plt.savefig(os.path.join(datadir, 'plot_nohook.pdf'), bbox_inches='tight')
-    mkplot(lines, hooks, master=False)
+    mkplot(lines, hooks, figsize, master=False)
     plt.savefig(os.path.join(datadir, 'agentplot.pdf'), bbox_inches='tight')
-    mkplot(lines, hooks, master=False, genhook=False)
+    mkplot(lines, hooks, figsize, master=False, genhook=False)
     plt.savefig(os.path.join(datadir, 'agentplot_nohook.pdf'), bbox_inches='tight')
-    mkplot(lines, hooks, agent=False)
+    mkplot(lines, hooks, figsize, agent=False)
     plt.savefig(os.path.join(datadir, 'masterplot.pdf'), bbox_inches='tight')
-    mkplot(lines, hooks, agent=False, genhook=False)
+    mkplot(lines, hooks, figsize, agent=False, genhook=False)
     plt.savefig(os.path.join(datadir, 'masterplot_nohook.pdf'), bbox_inches='tight')
 
-def mkplot(lines, hooks, genhook=True, master=True, agent=True):
-    fig = plt.figure(figsize=(40, 10))
+    mkplot(combolines, hooks, combofigsize)
+    plt.savefig(os.path.join(datadir, 'comboplot.pdf'), bbox_inches='tight')
+    mkplot(combolines, hooks, combofigsize, genhook=False)
+    plt.savefig(os.path.join(datadir, 'comboplot_nohook.pdf'), bbox_inches='tight')
+    mkplot(combolines, hooks, combofigsize, master=False)
+    plt.savefig(os.path.join(datadir, 'comboagentplot.pdf'), bbox_inches='tight')
+    mkplot(combolines, hooks, combofigsize, master=False, genhook=False)
+    plt.savefig(os.path.join(datadir, 'comboagentplot_nohook.pdf'), bbox_inches='tight')
+    mkplot(combolines, hooks, combofigsize, agent=False)
+    plt.savefig(os.path.join(datadir, 'combomasterplot.pdf'), bbox_inches='tight')
+    mkplot(combolines, hooks, combofigsize, agent=False, genhook=False)
+    plt.savefig(os.path.join(datadir, 'combomasterplot_nohook.pdf'), bbox_inches='tight')
+
+def mkcombolines(lines):
+    # we want a single master/agent line per host
+
+    data = {}  # {('host', 'role'): {'x': val, 'y': val}}
+    for ln in lines:
+        key = (ln.host, ln.role)
+        if key not in data:
+            data[key] = {'x': [], 'y': []}
+        rawline = data[key]
+        rawline["x"], rawline["y"] = mergeaxes(rawline["x"], rawline["y"], ln.x, ln.y)
+
+    lines = []
+    for key, val in data.items():
+        proc = "All Components"
+        host, role = key
+        x = val["x"]
+        y = val["y"]
+        lines.append(Line(host, role, proc, x, y))
+
+    return lines
+
+def mergeaxes(ox1, oy1, ox2, oy2):
+    # find the one with shorter x
+    # sum up the y values
+    # append the leftover from the longer
+    x1 = list(ox1)
+    x2 = list(ox2)
+    y1 = list(oy1)
+    y2 = list(oy2)
+
+    shortx = None
+    shorty = None
+    mergedx = None
+    mergedy = None
+
+    if len(x1) < len(x2):
+        shortx = x1
+        shorty = y1
+        mergedx = x2
+        mergedy = y2
+    else:
+        shortx = x2
+        shorty = y2
+        mergedx = x1
+        mergedy = y1
+
+    for i in range(len(shortx)):
+        mergedy[i] += shorty[i]
+
+    return (mergedx, mergedy)
+
+def mkplot(lines, hooks, figsize, genhook=True, master=True, agent=True):
+    fig = plt.figure(figsize=figsize)
 
     xmin = int(lines[0].x[0])
     xmax = int(lines[0].x[-1])
@@ -126,12 +197,12 @@ def parse(datadir, filenames):
         with open(os.path.join(datadir, fl)) as fd:
             reader = csv.DictReader(fd)
             for row in reader:
-                x = row[timestamp]
+                x = int(row[timestamp])
                 keys = row.keys()
                 for k in keys:
                     if k == timestamp:
                         continue
-                    y = row[k]
+                    y = float(row[k])
                     if k not in linedict[host]:
                         line = Line(host=host, proc=k, x=[x], y=[y])
                         linedict[host][k] = line
