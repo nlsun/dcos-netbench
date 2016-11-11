@@ -154,6 +154,27 @@ def mkplot(lines, hooks, figsize, genhook=True, master=True, agent=True):
         subplots[hookplot] = plt.subplot(num_plots, 1, len(subplots)+1)
         subplots[hookplot].set_xlim([xmin, xmax])
 
+    rawstats = {}  # {proc: {role: yvalues}}
+    for ln in lines:
+        key = ln.proc
+        if key not in rawstats:
+            rawstats[key] = {}
+        if ln.role not in rawstats[key]:
+            rawstats[key][ln.role] = []
+        rawstats[key][ln.role] += ln.y
+
+    stats = {}  # {proc: string}
+    for k, v in rawstats.items():
+        statformat = " {}[mean:{:.2f} median:{:.2f} variance:{:.2f}]"
+        statstr = ""
+        if Line.MASTER in v:
+            pts = v[Line.MASTER]
+            statstr += statformat.format('Master', mean(pts), median(pts), variance(pts))
+        if Line.AGENT in v:
+            pts = v[Line.AGENT]
+            statstr += statformat.format('Agent', mean(pts), median(pts), variance(pts))
+        stats[k] = statstr
+
     for ln in lines:
         if (not master and ln.master()) or (not agent and ln.agent()):
             continue
@@ -161,7 +182,8 @@ def mkplot(lines, hooks, figsize, genhook=True, master=True, agent=True):
             subplots[ln.proc].plot(ln.x, ln.y, color=ln.color)
         elif ln.agent():
             subplots[ln.proc].plot(ln.x, ln.y, color=ln.color)
-        subplots[ln.proc].set_title(ln.proc)
+        title = "{}{}".format(ln.proc, stats[ln.proc])
+        subplots[ln.proc].set_title(title)
         if genhook:
             for hk in hooks:
                 subplots[ln.proc].axvline(x=int(hk.ts))
@@ -175,6 +197,18 @@ def mkplot(lines, hooks, figsize, genhook=True, master=True, agent=True):
             subplots[hookplot].annotate(shortid, xy=(hk.ts, height[i%len(height)]))
 
     plt.tight_layout()
+
+def mean(yvalues):
+    return float(sum(yvalues))/len(yvalues)
+
+def median(yvalues):
+    return sorted(yvalues)[int(len(yvalues)/2)]
+
+def variance(yvalues):
+    sumsq = sum([x**2 for x in yvalues])
+    sumval = sum(yvalues)
+    length = len(yvalues)
+    return (sumsq - ((sumval**2) / length)) / (length - 1)
 
 def mklegend():
     ms_line = mlines.Line2D([], [], color=Line.MASTERCOLOR, markersize=15, label='master')
