@@ -1,6 +1,8 @@
+import datetime
 import os
 import shlex
 import subprocess
+import traceback
 
 ttracker = "ttracker"  # path to ttracker executable
 ttracker_url = "https://github.com/nlsun/ttracker/releases/download/v0.1.1/ttracker_linux_amd64"
@@ -148,6 +150,7 @@ def fetch_ttracker(config, fetchdir=None):
     logfile_name = None
     incoming_filename = False
     outdir = "{}ttracker_out".format(config.prefix)
+    errorlog = os.path.join(outdir, "ttracker_fetch_error.log")
     remote_dir = ""
     if fetchdir is not None:
         remote_dir = fetchdir + "/"
@@ -156,6 +159,7 @@ def fetch_ttracker(config, fetchdir=None):
         os.mkdir(outdir)
     except OSError as e:
         print("OSError: {}".format(e))
+    errorfd = open(errorlog, 'w+')
     for nd in masters(master, user) + agents(master, user):
         """
         The format of the output is:
@@ -180,7 +184,18 @@ def fetch_ttracker(config, fetchdir=None):
                 """ " """ +
                 """' """)
         print(comm)
-        output = subprocess.check_output(shlex.split(comm))
+        output = None
+        try:
+            output = subprocess.check_output(shlex.split(comm))
+        except subprocess.CalledProcessError as e:
+            timestamp = str(datetime.datetime.now())
+            trace = traceback.format_exc()
+            errorout = e.output.decode()
+            errorlist = [timestamp, trace, errorout]
+            errorfd.write('\n'.join(errorlist) + '\n')
+            for s in errorlist:
+                print(s)
+            continue
         for line in output.decode().splitlines():
             if line == newfile_marker:
                 if not (logfile_name is None and logfile_buffer is None):
@@ -196,6 +211,7 @@ def fetch_ttracker(config, fetchdir=None):
             logfile_buffer += line + os.linesep
         if not (logfile_name is None and logfile_buffer is None):
             flush_to_file(logfile_name, logfile_buffer)
+        errorfd.close()
 
 test_ttracker_hook_str = """\
 curl -H "Content-Type: application/json" \
