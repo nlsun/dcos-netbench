@@ -211,7 +211,7 @@ def fetch_ttracker(config, fetchdir=None):
             logfile_buffer += line + os.linesep
         if not (logfile_name is None and logfile_buffer is None):
             flush_to_file(logfile_name, logfile_buffer)
-        errorfd.close()
+    errorfd.close()
 
 test_ttracker_hook_str = """\
 curl -H "Content-Type: application/json" \
