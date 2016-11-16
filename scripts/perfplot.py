@@ -218,6 +218,7 @@ def mklegend():
 
 def parse(datadir, filenames):
     timestamp = "Timestamp"
+    dataerror = "error"
     linedict = {}  # {"hostname": {"procname": Line}}
     hooks = []  # List of Hooks
 
@@ -230,11 +231,16 @@ def parse(datadir, filenames):
             linedict[host] = {}
         with open(os.path.join(datadir, fl)) as fd:
             reader = csv.DictReader(fd)
+            errors = []
             for row in reader:
                 x = int(row[timestamp])
                 keys = row.keys()
                 for k in keys:
                     if k == timestamp:
+                        continue
+                    if row[k] == dataerror:
+                        if k not in errors:
+                            errors.append(k)
                         continue
                     y = float(row[k])
                     if k not in linedict[host]:
@@ -242,6 +248,8 @@ def parse(datadir, filenames):
                         linedict[host][k] = line
                     linedict[host][k].x.append(x)
                     linedict[host][k].y.append(y)
+            if errors:
+                print("encountered error with {}".format(errors))
 
     suffix = "_hook.csv"
     for fl in filenames:
