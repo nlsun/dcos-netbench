@@ -238,6 +238,10 @@ def parse(datadir, filenames):
                 for k in keys:
                     if k == timestamp:
                         continue
+                    if k in errors:
+                        # If an error was seen in a column, then invalidate
+                        # the rest of the values from that column
+                        continue
                     if row[k] == dataerror:
                         if k not in errors:
                             errors.append(k)
