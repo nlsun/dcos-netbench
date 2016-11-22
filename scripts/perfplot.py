@@ -154,6 +154,10 @@ def mkplot(lines, hooks, figsize, genhook=True, master=True, agent=True):
         subplots[hookplot] = plt.subplot(num_plots, 1, len(subplots)+1)
         subplots[hookplot].set_xlim([xmin, xmax])
 
+    for k in subplots:
+        subplots[k].set_xlabel("Time in seconds")
+        subplots[k].set_ylabel("CPU in %")
+
     rawstats = {}  # {proc: {role: yvalues}}
     for ln in lines:
         key = ln.proc
