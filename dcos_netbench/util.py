@@ -1,12 +1,29 @@
 import datetime
 import os
+import queue
 import shlex
 import subprocess
+import threading
 import traceback
 
 ttracker = "ttracker"  # path to ttracker executable
 ttracker_url = "https://github.com/nlsun/ttracker/releases/download/v0.1.1/ttracker_linux_amd64"
 ttracker_port = "38845"
+
+
+class ConcurrentLog():
+    def __init__(self, filepath, mode):
+        self.filepath = filepath
+        self.fd = open(filepath, mode)
+        self.lock = threading.Lock()
+
+    def write(self, string):
+        self.lock.acquire()
+        self.fd.write(string)
+        self.lock.release()
+
+    def close(self):
+        self.fd.close()
 
 
 def reset_file(file_fd):
@@ -145,12 +162,10 @@ def fetch_ttracker(config, fetchdir=None):
     """
     user = config.user
     master = config.ms
-    newfile_marker = "DCOS_NETBENCH_NEWFILE"
-    logfile_buffer = None
-    logfile_name = None
     incoming_filename = False
     outdir = "{}ttracker_out".format(config.prefix)
-    errorlog = os.path.join(outdir, "ttracker_fetch_error.log")
+    errorlogname = os.path.join(outdir, "ttracker_fetch_error.log")
+    worker_pool_size = 50
     remote_dir = ""
     if fetchdir is not None:
         remote_dir = fetchdir + "/"
@@ -159,59 +174,87 @@ def fetch_ttracker(config, fetchdir=None):
         os.mkdir(outdir)
     except OSError as e:
         print("OSError: {}".format(e))
-    errorfd = open(errorlog, 'w+')
+    errorlog = ConcurrentLog(errorlogname, 'w+')
+    nodeq = queue.Queue()
     for nd in masters(master, user) + agents(master, user):
-        """
-        The format of the output is:
+        nodeq.put(nd)
+    threads = []
+    for _ in range(worker_pool_size):
+        targs = (nodeq, master, user, nd, remote_dir, errorlog, outdir)
+        t = threading.Thread(target=fetch_ttracker_worker, args=targs)
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
+    nodeq.join()
+    errorlog.close()
 
-        DCOS_NETBENCH_NEWFILE
-        <filename1>
-        <file1 content>
-        DCOS_NETBENCH_NEWFILE
-        <filename2>
-        <file2 content>
-        ...
-
-        """
-        comm = ("""ssh -A -o StrictHostKeyChecking=no {}@{} """.format(user, master) +
-                """'ssh -o StrictHostKeyChecking=no {} """.format(nd) +
-                """ "for fl in {}\$(hostname)*; do """.format(remote_dir) +
-                """    echo \\\"{}\\\" && """.format(newfile_marker) +
-                """    echo \$(basename \${fl}) && """ +
-                """    cat \${fl} && """ +
-                """    echo \\\"\\\" ; """ +
-                """  done """ +
-                """ " """ +
-                """' """)
-        print(comm)
-        output = None
+def fetch_ttracker_worker(nodeq, master, user, node, remote_dir, errorlog, outdir):
+    while True:
+        node = None
         try:
-            output = subprocess.check_output(shlex.split(comm))
-        except subprocess.CalledProcessError as e:
-            timestamp = str(datetime.datetime.now())
-            trace = traceback.format_exc()
-            errorout = e.output.decode()
-            errorlist = [timestamp, trace, errorout]
-            errorfd.write('\n'.join(errorlist) + '\n')
-            for s in errorlist:
-                print(s)
+            node = nodeq.get(block=False)
+            fetch_ttracker_host(master, user, node, remote_dir, errorlog, outdir)
+            nodeq.task_done()
+        except queue.Empty:
+            break
+
+def fetch_ttracker_host(master, user, node, remote_dir, errorlog, outdir):
+    """
+    The format of the output is:
+
+    DCOS_NETBENCH_NEWFILE
+    <filename1>
+    <file1 content>
+    DCOS_NETBENCH_NEWFILE
+    <filename2>
+    <file2 content>
+    ...
+
+    """
+    newfile_marker = "DCOS_NETBENCH_NEWFILE"
+    logfile_buffer = None
+    logfile_name = None
+
+    comm = ("""ssh -A -o StrictHostKeyChecking=no {}@{} """.format(user, master) +
+            """'ssh -o StrictHostKeyChecking=no {} """.format(node) +
+            """ "for fl in {}\$(hostname)*; do """.format(remote_dir) +
+            """    echo \\\"{}\\\" && """.format(newfile_marker) +
+            """    echo \$(basename \${fl}) && """ +
+            """    cat \${fl} && """ +
+            """    echo \\\"\\\" ; """ +
+            """  done """ +
+            """ " """ +
+            """' """)
+    print(comm)
+    output = None
+    try:
+        output = subprocess.check_output(shlex.split(comm))
+    except subprocess.CalledProcessError as e:
+        timestamp = str(datetime.datetime.now())
+        trace = traceback.format_exc()
+        errorout = e.output.decode()
+        errorlist = [timestamp, trace, errorout]
+        errorlog.write('\n'.join(errorlist) + '\n')
+        for s in errorlist:
+            print(s)
+        return
+    for line in output.decode().splitlines():
+        if line == newfile_marker:
+            if not (logfile_name is None and logfile_buffer is None):
+                flush_to_file(logfile_name, logfile_buffer)
+            logfile_buffer = ""
+            logfile_name = ""
+            incoming_filename = True
             continue
-        for line in output.decode().splitlines():
-            if line == newfile_marker:
-                if not (logfile_name is None and logfile_buffer is None):
-                    flush_to_file(logfile_name, logfile_buffer)
-                logfile_buffer = ""
-                logfile_name = ""
-                incoming_filename = True
-                continue
-            if incoming_filename:
-                logfile_name = os.path.join(outdir, line)
-                incoming_filename = False
-                continue
-            logfile_buffer += line + os.linesep
-        if not (logfile_name is None and logfile_buffer is None):
-            flush_to_file(logfile_name, logfile_buffer)
-    errorfd.close()
+        if incoming_filename:
+            logfile_name = os.path.join(outdir, line)
+            incoming_filename = False
+            continue
+        logfile_buffer += line + os.linesep
+    if not (logfile_name is None and logfile_buffer is None):
+        flush_to_file(logfile_name, logfile_buffer)
+
 
 test_ttracker_hook_str = """\
 curl -H "Content-Type: application/json" \
