@@ -13,6 +13,7 @@ import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import datetime
 import numpy as np
+import random
 import sys
 import os
 
@@ -40,6 +41,8 @@ def main():
     (lines, hooks) = parse(datadir, filenames)
     combolines = mkcombolines(lines)
     combofigsize = (figsize[0], figsize[1]/2)
+    sampledlines = mksampledlines(lines, 5)
+
 
     mkplot(lines, hooks, figsize)
     plt.savefig(os.path.join(datadir, 'plot.pdf'), bbox_inches='tight')
@@ -54,6 +57,15 @@ def main():
     mkplot(lines, hooks, figsize, agent=False, genhook=False)
     plt.savefig(os.path.join(datadir, 'masterplot_nohook.pdf'), bbox_inches='tight')
 
+    mkplot(sampledlines, hooks, figsize)
+    plt.savefig(os.path.join(datadir, 'sampledplot.pdf'), bbox_inches='tight')
+    mkplot(sampledlines, hooks, figsize, genhook=False)
+    plt.savefig(os.path.join(datadir, 'sampledplot_nohook.pdf'), bbox_inches='tight')
+    mkplot(sampledlines, hooks, figsize, master=False)
+    plt.savefig(os.path.join(datadir, 'sampledagentplot.pdf'), bbox_inches='tight')
+    mkplot(sampledlines, hooks, figsize, master=False, genhook=False)
+    plt.savefig(os.path.join(datadir, 'sampledagentplot_nohook.pdf'), bbox_inches='tight')
+
     mkplot(combolines, hooks, combofigsize)
     plt.savefig(os.path.join(datadir, 'comboplot.pdf'), bbox_inches='tight')
     mkplot(combolines, hooks, combofigsize, genhook=False)
@@ -66,6 +78,19 @@ def main():
     plt.savefig(os.path.join(datadir, 'combomasterplot.pdf'), bbox_inches='tight')
     mkplot(combolines, hooks, combofigsize, agent=False, genhook=False)
     plt.savefig(os.path.join(datadir, 'combomasterplot_nohook.pdf'), bbox_inches='tight')
+
+def mksampledlines(lines, samplesize):
+    keeplines = []
+    agentlines = []
+
+    for ln in lines:
+        if ln.role == Line.AGENT:
+            agentlines.append(ln)
+            continue
+        keeplines.append(ln)
+
+    sampledagents = random.sample(agentlines, min(samplesize, len(agentlines)))
+    return keeplines + sampledagents
 
 def mkcombolines(lines):
     # we want a single master/agent line per host
